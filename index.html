@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Courtyard Liberty Station â Team Briefing</title>
+<title>Courtyard Liberty Station — Team Briefing</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -42,7 +42,7 @@
     background: var(--border);
   }
 
-  /* âââ LOADING OVERLAY âââ */
+  /* ─── LOADING OVERLAY ─── */
   .loading-overlay {
     position: fixed;
     inset: 0;
@@ -70,7 +70,7 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* âââ STATUS INDICATOR âââ */
+  /* ─── STATUS INDICATOR ─── */
   .data-status {
     display: flex;
     align-items: center;
@@ -87,7 +87,7 @@
   .status-dot.offline { background: var(--urgent); }
   .status-dot.stale { background: var(--accent); }
 
-  /* âââ TOP BAR âââ */
+  /* ─── TOP BAR ─── */
   .topbar {
     grid-column: 1 / -1;
     background: var(--surface);
@@ -160,7 +160,7 @@
     letter-spacing: 0.3px;
   }
 
-  /* âââ LEFT SIDEBAR âââ */
+  /* ─── LEFT SIDEBAR ─── */
   .sidebar {
     grid-row: 2 / -1;
     background: var(--surface);
@@ -274,7 +274,7 @@
   .weather-desc { font-size: 13px; color: var(--text-dim); }
   .weather-detail { font-size: 11px; color: var(--text-dim); }
 
-  /* âââ MAIN PANELS âââ */
+  /* ─── MAIN PANELS ─── */
   .panel {
     background: var(--surface);
     padding: 24px;
@@ -471,7 +471,7 @@
 <!-- Loading overlay -->
 <div class="loading-overlay" id="loadingOverlay">
   <div class="loading-spinner"></div>
-  <div class="loading-text">Loading briefing dataâ¦</div>
+  <div class="loading-text">Loading briefing data…</div>
 </div>
 
 <div class="app">
@@ -488,7 +488,7 @@
     <div class="topbar-right">
       <div class="data-status" id="dataStatus">
         <div class="status-dot" id="statusDot"></div>
-        <span id="statusText">Connectingâ¦</span>
+        <span id="statusText">Connecting…</span>
       </div>
       <div class="date-display" id="dateDisplay"></div>
       <div class="shift-badge" id="shiftBadge"></div>
@@ -501,8 +501,8 @@
     <div class="sidebar-section">
       <div class="section-label">PMS Migration</div>
       <div class="countdown-number" id="countdownDays">--</div>
-      <div class="countdown-label">days until FOSSE â Stay</div>
-      <div class="countdown-sub">Target: June 15, 2026 Â· Power of M</div>
+      <div class="countdown-label">days until FOSSE → Stay</div>
+      <div class="countdown-sub">Target: June 15, 2026 · Power of M</div>
     </div>
 
     <div class="sidebar-section">
@@ -512,9 +512,9 @@
 
     <div class="sidebar-section">
       <div class="aoa-box">
-        <div class="aoa-icon">â¦</div>
+        <div class="aoa-icon">✦</div>
         <div class="aoa-text">Act of Awe</div>
-        <div class="aoa-sub">Min 1 per shift Â· Aim for 2<br>Document in MOD report</div>
+        <div class="aoa-sub">Min 1 per shift · Aim for 2<br>Document in MOD report</div>
       </div>
     </div>
 
@@ -522,7 +522,7 @@
       <div class="section-label">San Diego Weather</div>
       <div id="weatherContainer">
         <div class="weather-row">
-          <div class="weather-temp" id="weatherTemp">--Â°</div>
+          <div class="weather-temp" id="weatherTemp">--°</div>
           <div>
             <div class="weather-desc" id="weatherDesc">--</div>
             <div class="weather-detail" id="weatherDetail"></div>
@@ -532,7 +532,7 @@
     </div>
 
     <div class="sidebar-section" style="flex:1; overflow-y:auto;">
-      <div class="section-label">Shift Checklist â <span id="shiftChecklistLabel">--</span></div>
+      <div class="section-label">Shift Checklist — <span id="shiftChecklistLabel">--</span></div>
       <div id="shiftChecklist"></div>
     </div>
   </div>
@@ -558,14 +558,14 @@
 </div>
 
 <script>
-// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ═══════════════════════════════════════════════════════════════
 //  GOOGLE SHEETS CONFIGURATION
-// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ═══════════════════════════════════════════════════════════════
 //
 //  1. Create a Google Sheet with tabs named exactly:
 //     tasks, reminders, updates, shoutouts, stats, weather, config
 //
-//  2. Publish the sheet: File â Share â Publish to web â Entire document â CSV
+//  2. Publish the sheet: File → Share → Publish to web → Entire document → CSV
 //
 //  3. Paste your Sheet ID below (the long string in the Sheet URL):
 //     https://docs.google.com/spreadsheets/d/SHEET_ID_HERE/edit
@@ -582,9 +582,9 @@ const MIGRATION_DATE = '2026-06-15';
 const ROTATION_INTERVAL = 15000;
 
 
-// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ═══════════════════════════════════════════════════════════════
 //  SHEET COLUMN SCHEMAS (match your Google Sheet headers)
-// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ═══════════════════════════════════════════════════════════════
 //
 //  TAB: tasks
 //  Columns: title | meta | due | dueClass | priority | active
@@ -616,9 +616,9 @@ const ROTATION_INTERVAL = 15000;
 //  Rows: migrationDate | rotationInterval | propertyName
 
 
-// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ═══════════════════════════════════════════════════════════════
 //  FALLBACK DATA (used when Sheet is unreachable)
-// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ═══════════════════════════════════════════════════════════════
 
 const FALLBACK = {
   tasks: [],
@@ -629,21 +629,21 @@ const FALLBACK = {
   weather: { temp: '--', description: 'San Diego', high: '--', low: '--', pool: '' }
 };
 
-// âââ Shift checklists (static â these don't change often) âââ
+// ─── Shift checklists (static — these don't change often) ───
 const CHECKLISTS = {
   1: [
     'Open Shuttle log, Kipsu, GXP, FOSSE',
     'Verify $300 in drawer',
     'Run MICROS poll after 2AM',
-    'Run ONE BUTTON (10â15 min process)',
+    'Run ONE BUTTON (10–15 min process)',
     'GNS: charge BAR rate for points no-shows, keep deposits',
-    'Elite arrivals â assign ANY available room',
+    'Elite arrivals → assign ANY available room',
     'Prep arrivals report for AM shift',
     'Complete Act of Awe (min 1)'
   ],
   2: [
     'Review Night Audit pass-down notes',
-    'Check arrivals report (F8 â TAB â F â P â A)',
+    'Check arrivals report (F8 → TAB → F → P → A)',
     'Process departures, verify late checkouts',
     'Gold late checkout: approve after 6AM based on availability',
     'Cash log: enter NUMBER of bills/coins, save start + end',
@@ -657,16 +657,16 @@ const CHECKLISTS = {
     'Verify elite arrivals have proper room assignments',
     'Confirm Sertifi authorizations for business arrivals',
     'Cash log: enter NUMBER of bills/coins, save start + end',
-    'Close shift: F8 â TAB â F â C â S then U',
+    'Close shift: F8 → TAB → F → C → S then U',
     'Send MOD pass-down email before end of shift',
     'Complete Act of Awe (min 1, aim for 2)'
   ]
 };
 
 
-// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ═══════════════════════════════════════════════════════════════
 //  DATA FETCHING ENGINE
-// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ═══════════════════════════════════════════════════════════════
 
 let liveData = null;
 let lastFetch = null;
@@ -700,7 +700,7 @@ function parseCSV(csv) {
         current = '';
       }
       if (lines.length > 0) {
-        // We've reached end of a row â but we need to return rows not flat cells
+        // We've reached end of a row — but we need to return rows not flat cells
         // Let me redo this properly
       }
     } else {
@@ -841,20 +841,20 @@ function updateStatus(state) {
   const text = document.getElementById('statusText');
   if (state === 'live') {
     dot.className = 'status-dot';
-    text.textContent = `Live Â· ${lastFetch.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}`;
+    text.textContent = `Live · ${lastFetch.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}`;
   } else if (state === 'stale') {
     dot.className = 'status-dot stale';
-    text.textContent = `Stale Â· Last: ${lastFetch.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}`;
+    text.textContent = `Stale · Last: ${lastFetch.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}`;
   } else {
     dot.className = 'status-dot offline';
-    text.textContent = 'Offline Â· Using defaults';
+    text.textContent = 'Offline · Using defaults';
   }
 }
 
 
-// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ═══════════════════════════════════════════════════════════════
 //  RENDERING
-// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ═══════════════════════════════════════════════════════════════
 
 function getCurrentShift() {
   const h = new Date().getHours();
@@ -864,7 +864,7 @@ function getCurrentShift() {
 }
 
 function getShiftLabel(s) {
-  return { 1: 'Night Audit Â· 11Pâ7A', 2: 'AM Shift Â· 7Aâ3P', 3: 'PM Shift Â· 3Pâ11P' }[s];
+  return { 1: 'Night Audit · 11P–7A', 2: 'AM Shift · 7A–3P', 3: 'PM Shift · 3P–11P' }[s];
 }
 
 function getShiftShort(s) {
@@ -906,9 +906,9 @@ function renderStats() {
 
 function renderWeather() {
   const w = getData().weather;
-  document.getElementById('weatherTemp').textContent = `${w.temp}Â°F`;
+  document.getElementById('weatherTemp').textContent = `${w.temp}°F`;
   document.getElementById('weatherDesc').textContent = w.description;
-  document.getElementById('weatherDetail').textContent = `H: ${w.high}Â° Â· L: ${w.low}Â°${w.pool ? ' Â· ' + w.pool : ''}`;
+  document.getElementById('weatherDetail').textContent = `H: ${w.high}° · L: ${w.low}°${w.pool ? ' · ' + w.pool : ''}`;
 }
 
 function renderChecklist() {
@@ -952,7 +952,7 @@ function renderUpdates() {
 function renderShoutouts() {
   return getData().shoutouts.map((s, i) => `
     <div class="shoutout-item" style="animation-delay:${i*0.06}s">
-      <div class="shoutout-name">â ${s.name}</div>
+      <div class="shoutout-name">★ ${s.name}</div>
       <div class="shoutout-reason">${s.reason}</div>
     </div>`).join('');
 }
@@ -998,9 +998,9 @@ function renderAll() {
 }
 
 
-// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ═══════════════════════════════════════════════════════════════
 //  INIT
-// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ═══════════════════════════════════════════════════════════════
 
 async function init() {
   updateClock();
