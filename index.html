@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Courtyard Liberty Station — Team Briefing</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #181a22;
+    --surface-alt: #1e2130;
+    --border: #2a2d3a;
+    --text: #e8e6e1;
+    --text-dim: #8b8d97;
+    --accent: #d4a04a;
+    --accent-glow: rgba(212, 160, 74, 0.15);
+    --urgent: #e05555;
+    --success: #4caf80;
+    --info: #5b9bd5;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .app {
+    display: grid;
+    grid-template-columns: 300px 1fr 1fr;
+    grid-template-rows: 64px 1fr;
+    gap: 1px;
+    height: 100vh;
+    background: var(--border);
+  }
+
+  /* ─── LOADING OVERLAY ─── */
+  .loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    transition: opacity 0.6s ease;
+  }
+  .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+  .loading-spinner {
+    width: 32px; height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  .loading-text {
+    margin-top: 16px;
+    font-size: 13px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ─── STATUS INDICATOR ─── */
+  .data-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+  }
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--success);
+  }
+  .status-dot.offline { background: var(--urgent); }
+  .status-dot.stale { background: var(--accent); }
+
+  /* ─── TOP BAR ─── */
+  .topbar {
+    grid-column: 1 / -1;
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+  }
+
+  .topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .logo-mark {
+    width: 8px;
+    height: 32px;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+
+  .property-name {
+    font-family: 'DM Serif Display', serif;
+    font-size: 18px;
+    letter-spacing: 0.5px;
+    color: var(--text);
+  }
+
+  .property-name span {
+    color: var(--accent);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 300;
+    font-size: 13px;
+    margin-left: 12px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+
+  .clock {
+    font-size: 28px;
+    font-weight: 300;
+    letter-spacing: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .shift-badge {
+    padding: 6px 16px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+
+  .shift-1 { background: #2d1f4e; color: #b48eff; }
+  .shift-2 { background: #1f3a2d; color: #6fcf97; }
+  .shift-3 { background: #3a2a1f; color: #f2a85e; }
+
+  .date-display {
+    font-size: 13px;
+    color: var(--text-dim);
+    font-weight: 400;
+    letter-spacing: 0.3px;
+  }
+
+  /* ─── LEFT SIDEBAR ─── */
+  .sidebar {
+    grid-row: 2 / -1;
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .sidebar-section {
+    padding: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-section:last-child {
+    border-bottom: none;
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+
+  .countdown-number {
+    font-family: 'DM Serif Display', serif;
+    font-size: 56px;
+    line-height: 1;
+    color: var(--accent);
+  }
+
+  .countdown-label {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  .countdown-sub {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .stat-card {
+    background: var(--surface-alt);
+    border-radius: 6px;
+    padding: 12px;
+    text-align: center;
+  }
+
+  .stat-value {
+    font-family: 'DM Serif Display', serif;
+    font-size: 28px;
+    color: var(--text);
+  }
+
+  .stat-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 2px;
+  }
+
+  .aoa-box {
+    background: var(--accent-glow);
+    border: 1px solid rgba(212,160,74,0.25);
+    border-radius: 8px;
+    padding: 14px;
+    text-align: center;
+  }
+
+  .aoa-icon { font-size: 22px; margin-bottom: 6px; }
+
+  .aoa-text {
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  .aoa-sub {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  .weather-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+  }
+
+  .weather-temp {
+    font-family: 'DM Serif Display', serif;
+    font-size: 32px;
+  }
+
+  .weather-desc { font-size: 13px; color: var(--text-dim); }
+  .weather-detail { font-size: 11px; color: var(--text-dim); }
+
+  /* ─── MAIN PANELS ─── */
+  .panel {
+    background: var(--surface);
+    padding: 24px;
+    overflow-y: auto;
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .panel-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 18px;
+    color: var(--text);
+  }
+
+  .panel-count {
+    font-size: 11px;
+    color: var(--text-dim);
+    background: var(--surface-alt);
+    padding: 3px 10px;
+    border-radius: 12px;
+  }
+
+  .task-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+    animation: fadeSlideIn 0.4s ease both;
+  }
+
+  .task-item:last-child { border-bottom: none; }
+
+  .task-priority {
+    width: 4px;
+    border-radius: 2px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .priority-high { background: var(--urgent); }
+  .priority-medium { background: var(--accent); }
+  .priority-low { background: var(--info); }
+
+  .task-content { flex: 1; }
+
+  .task-title {
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.3;
+    margin-bottom: 4px;
+  }
+
+  .task-meta { font-size: 11px; color: var(--text-dim); }
+
+  .task-due {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: 500;
+    white-space: nowrap;
+    height: fit-content;
+  }
+
+  .due-urgent { background: rgba(224,85,85,0.15); color: var(--urgent); }
+  .due-soon { background: rgba(212,160,74,0.15); color: var(--accent); }
+  .due-normal { background: var(--surface-alt); color: var(--text-dim); }
+
+  .reminder-item {
+    padding: 10px 14px;
+    background: var(--surface-alt);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+    border-left: 3px solid var(--border);
+    animation: fadeSlideIn 0.4s ease both;
+  }
+
+  .reminder-item.highlight {
+    border-left-color: var(--accent);
+    background: var(--accent-glow);
+  }
+
+  .reminder-category {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+
+  .update-item {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+    animation: fadeSlideIn 0.4s ease both;
+  }
+
+  .update-item:last-child { border-bottom: none; }
+
+  .update-date {
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+
+  .update-text {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .update-source {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 4px;
+    font-style: italic;
+  }
+
+  .shoutout-item {
+    padding: 12px 14px;
+    background: linear-gradient(135deg, var(--accent-glow), transparent);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    border: 1px solid rgba(212,160,74,0.12);
+    animation: fadeSlideIn 0.4s ease both;
+  }
+
+  .shoutout-name {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+
+  .shoutout-reason {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+
+  .checklist-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 0;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--text-dim);
+  }
+
+  .check-bullet {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-top: 5px;
+    flex-shrink: 0;
+  }
+
+  .page-dots { display: flex; gap: 6px; }
+
+  .page-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: all 0.3s ease;
+  }
+
+  .page-dot.active {
+    background: var(--accent);
+    width: 20px;
+    border-radius: 3px;
+  }
+
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- Loading overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">Loading briefing data…</div>
+</div>
+
+<div class="app">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="logo-mark"></div>
+      <div class="property-name">
+        Courtyard Liberty Station
+        <span>Team Briefing</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="data-status" id="dataStatus">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">Connecting…</span>
+      </div>
+      <div class="date-display" id="dateDisplay"></div>
+      <div class="shift-badge" id="shiftBadge"></div>
+      <div class="clock" id="clock"></div>
+    </div>
+  </div>
+
+  <!-- LEFT SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="section-label">PMS Migration</div>
+      <div class="countdown-number" id="countdownDays">--</div>
+      <div class="countdown-label">days until FOSSE → Stay</div>
+      <div class="countdown-sub">Target: June 15, 2026 · Power of M</div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">Today's Snapshot</div>
+      <div class="stats-grid" id="statsGrid"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="aoa-box">
+        <div class="aoa-icon">✦</div>
+        <div class="aoa-text">Act of Awe</div>
+        <div class="aoa-sub">Min 1 per shift · Aim for 2<br>Document in MOD report</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">San Diego Weather</div>
+      <div id="weatherContainer">
+        <div class="weather-row">
+          <div class="weather-temp" id="weatherTemp">--°</div>
+          <div>
+            <div class="weather-desc" id="weatherDesc">--</div>
+            <div class="weather-detail" id="weatherDetail"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section" style="flex:1; overflow-y:auto;">
+      <div class="section-label">Shift Checklist — <span id="shiftChecklistLabel">--</span></div>
+      <div id="shiftChecklist"></div>
+    </div>
+  </div>
+
+  <!-- MAIN PANEL LEFT -->
+  <div class="panel" id="leftPanel">
+    <div class="panel-header">
+      <div class="panel-title" id="leftTitle">Tasks</div>
+      <div class="page-dots" id="leftDots"></div>
+    </div>
+    <div id="leftContent"></div>
+  </div>
+
+  <!-- MAIN PANEL RIGHT -->
+  <div class="panel" id="rightPanel">
+    <div class="panel-header">
+      <div class="panel-title" id="rightTitle">Updates</div>
+      <div class="page-dots" id="rightDots"></div>
+    </div>
+    <div id="rightContent"></div>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  GOOGLE SHEETS CONFIGURATION
+// ═══════════════════════════════════════════════════════════════
+//
+//  1. Create a Google Sheet with tabs named exactly:
+//     tasks, reminders, updates, shoutouts, stats, weather, config
+//
+//  2. Publish the sheet: File → Share → Publish to web → Entire document → CSV
+//
+//  3. Paste your Sheet ID below (the long string in the Sheet URL):
+//     https://docs.google.com/spreadsheets/d/SHEET_ID_HERE/edit
+//
+const SHEET_ID = '1LF6KdUG191bP5q97aKfi69upgGIEa7mszWyox1Vt-aY';
+
+// How often to re-fetch data from the sheet (milliseconds)
+const FETCH_INTERVAL = 5 * 60 * 1000; // 5 minutes
+
+// Migration target (also editable from "config" tab)
+const MIGRATION_DATE = '2026-06-15';
+
+// Rotation speed for auto-cycling panels (milliseconds)
+const ROTATION_INTERVAL = 15000;
+
+
+// ═══════════════════════════════════════════════════════════════
+//  SHEET COLUMN SCHEMAS (match your Google Sheet headers)
+// ═══════════════════════════════════════════════════════════════
+//
+//  TAB: tasks
+//  Columns: title | meta | due | dueClass | priority | active
+//  dueClass: due-urgent | due-soon | due-normal
+//  priority: high | medium | low
+//  active: TRUE to show, FALSE to hide
+//
+//  TAB: reminders
+//  Columns: category | text | highlight | active
+//  highlight: TRUE | FALSE
+//
+//  TAB: updates
+//  Columns: date | text | source | active
+//  source: optional, e.g. "via Gmail" or "Manual"
+//
+//  TAB: shoutouts
+//  Columns: name | reason | active
+//
+//  TAB: stats
+//  Columns: key | value
+//  Rows: arrivals | departures | occupancy | vips
+//
+//  TAB: weather
+//  Columns: key | value
+//  Rows: temp | description | high | low | pool
+//
+//  TAB: config
+//  Columns: key | value
+//  Rows: migrationDate | rotationInterval | propertyName
+
+
+// ═══════════════════════════════════════════════════════════════
+//  FALLBACK DATA (used when Sheet is unreachable)
+// ═══════════════════════════════════════════════════════════════
+
+const FALLBACK = {
+  tasks: [
+    { title: 'Simphony-to-FOSSE reconciliation — verify all outlet postings before April 16 sync decommission', meta: 'Finance / Operations', due: 'Apr 16', dueClass: 'due-urgent', priority: 'high' },
+    { title: 'Complete Stay PMS training modules (DLZ) — all FD agents must finish before migration', meta: 'Training / Migration', due: 'Jun 1', dueClass: 'due-soon', priority: 'high' },
+    { title: 'Submit updated emergency contact list to HHG Dallas', meta: 'Compliance', due: 'Mar 31', dueClass: 'due-urgent', priority: 'medium' },
+    { title: 'Audit petty cash log — reconcile with receipts for March', meta: 'Finance', due: 'Mar 31', dueClass: 'due-urgent', priority: 'medium' },
+    { title: 'Review Sertifi folder naming conventions ahead of PMS switch', meta: 'Operations', due: 'May 15', dueClass: 'due-normal', priority: 'low' },
+    { title: 'Schedule CPR recertification for agents due in Q2', meta: 'Compliance / HR', due: 'Apr 30', dueClass: 'due-soon', priority: 'medium' }
+  ],
+  reminders: [
+    { category: 'Policy', text: 'Platinum+ guests are GUARANTEED 4PM late checkout. Do not deny.', highlight: true },
+    { category: 'Coastal Commission', text: 'No Park & Fly permitted. Parking priority: Hotel guests → Conference → Public.', highlight: true },
+    { category: 'Payments', text: 'Card swipe = HOLD only. Chip/tap = payment. Points stays use CASH payment type, $30/night incidentals, $0 rate.', highlight: false },
+    { category: 'Guest Recovery', text: 'Use LASTD: Listen → Apologize → Solve → Thank → Document. Comp authority up to $100 off rate or 0–10K points.', highlight: false },
+    { category: 'Sertifi', text: 'Business stays only. Business email required (no Gmail/Yahoo). No same-day authorizations. New Sertifi for extensions.', highlight: false },
+    { category: 'Compensation', text: 'ALL comps must be emailed to management AND included in MOD email with: guest name, folio #, reason, what was given.', highlight: true }
+  ],
+  updates: [
+    { date: 'Mar 25', text: 'Stay PMS sandbox environment now available for practice. Credentials in back office.', source: '' },
+    { date: 'Mar 24', text: 'New market inventory pricing spreadsheet deployed with margin analysis across vendors.', source: '' }
+  ],
+  shoutouts: [
+    { name: 'Team', reason: 'Connect Google Sheet to see live shoutouts!' }
+  ],
+  stats: { arrivals: '--', departures: '--', occupancy: '--%', vips: '--' },
+  weather: { temp: 68, description: 'San Diego', high: 72, low: 58, pool: 'Pool open' }
+};
+
+// ─── Shift checklists (static — these don't change often) ───
+const CHECKLISTS = {
+  1: [
+    'Open Shuttle log, Kipsu, GXP, FOSSE',
+    'Verify $300 in drawer',
+    'Run MICROS poll after 2AM',
+    'Run ONE BUTTON (10–15 min process)',
+    'GNS: charge BAR rate for points no-shows, keep deposits',
+    'Elite arrivals → assign ANY available room',
+    'Prep arrivals report for AM shift',
+    'Complete Act of Awe (min 1)'
+  ],
+  2: [
+    'Review Night Audit pass-down notes',
+    'Check arrivals report (F8 → TAB → F → P → A)',
+    'Process departures, verify late checkouts',
+    'Gold late checkout: approve after 6AM based on availability',
+    'Cash log: enter NUMBER of bills/coins, save start + end',
+    'Respond to Kipsu messages within 5 min',
+    'Check Lodgistics for open maintenance tickets',
+    'Complete Act of Awe (min 1, aim for 2)'
+  ],
+  3: [
+    'Review AM pass-down notes',
+    'Process check-ins starting at 4PM',
+    'Verify elite arrivals have proper room assignments',
+    'Confirm Sertifi authorizations for business arrivals',
+    'Cash log: enter NUMBER of bills/coins, save start + end',
+    'Close shift: F8 → TAB → F → C → S then U',
+    'Send MOD pass-down email before end of shift',
+    'Complete Act of Awe (min 1, aim for 2)'
+  ]
+};
+
+
+// ═══════════════════════════════════════════════════════════════
+//  DATA FETCHING ENGINE
+// ═══════════════════════════════════════════════════════════════
+
+let liveData = null;
+let lastFetch = null;
+let fetchError = false;
+
+function sheetURL(tab) {
+  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`;
+}
+
+function parseCSV(csv) {
+  // Simple CSV parser that handles quoted fields
+  const lines = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < csv.length; i++) {
+    const ch = csv[i];
+    if (ch === '"') {
+      if (inQuotes && csv[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === ',' && !inQuotes) {
+      lines.push(current);
+      current = '';
+    } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
+      if (current || lines.length > 0) {
+        lines.push(current);
+        current = '';
+      }
+      if (lines.length > 0) {
+        // We've reached end of a row — but we need to return rows not flat cells
+        // Let me redo this properly
+      }
+    } else {
+      current += ch;
+    }
+  }
+
+  // Better approach: split into rows first
+  return parseCSVRows(csv);
+}
+
+function parseCSVRows(csv) {
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < csv.length; i++) {
+    const ch = csv[i];
+    if (ch === '"') {
+      if (inQuotes && csv[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === ',' && !inQuotes) {
+      row.push(cell.trim());
+      cell = '';
+    } else if (ch === '\n' && !inQuotes) {
+      row.push(cell.trim());
+      if (row.some(c => c !== '')) rows.push(row);
+      row = [];
+      cell = '';
+    } else if (ch === '\r' && !inQuotes) {
+      // skip carriage return
+    } else {
+      cell += ch;
+    }
+  }
+  // Last cell/row
+  row.push(cell.trim());
+  if (row.some(c => c !== '')) rows.push(row);
+
+  return rows;
+}
+
+function csvToObjects(csv) {
+  const rows = parseCSVRows(csv);
+  if (rows.length < 2) return [];
+  const headers = rows[0].map(h => h.toLowerCase().trim());
+  return rows.slice(1).map(row => {
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = row[i] || ''; });
+    return obj;
+  });
+}
+
+function csvToKeyValue(csv) {
+  const rows = parseCSVRows(csv);
+  if (rows.length < 2) return {};
+  const obj = {};
+  rows.slice(1).forEach(row => {
+    if (row[0]) obj[row[0].toLowerCase().trim()] = row[1] || '';
+  });
+  return obj;
+}
+
+async function fetchTab(tab) {
+  const resp = await fetch(sheetURL(tab));
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return await resp.text();
+}
+
+async function fetchAllData() {
+  try {
+    const [tasksCSV, remindersCSV, updatesCSV, shoutoutsCSV, statsCSV, weatherCSV] = await Promise.all([
+      fetchTab('tasks'),
+      fetchTab('reminders'),
+      fetchTab('updates'),
+      fetchTab('shoutouts'),
+      fetchTab('stats'),
+      fetchTab('weather')
+    ]);
+
+    const tasks = csvToObjects(tasksCSV).filter(t => t.active !== 'FALSE');
+    const reminders = csvToObjects(remindersCSV)
+      .filter(r => r.active !== 'FALSE')
+      .map(r => ({ ...r, highlight: r.highlight === 'TRUE' }));
+    const updates = csvToObjects(updatesCSV).filter(u => u.active !== 'FALSE');
+    const shoutouts = csvToObjects(shoutoutsCSV).filter(s => s.active !== 'FALSE');
+    const statsKV = csvToKeyValue(statsCSV);
+    const weatherKV = csvToKeyValue(weatherCSV);
+
+    liveData = {
+      tasks,
+      reminders,
+      updates,
+      shoutouts,
+      stats: {
+        arrivals: statsKV.arrivals || '--',
+        departures: statsKV.departures || '--',
+        occupancy: statsKV.occupancy || '--%',
+        vips: statsKV.vips || '--'
+      },
+      weather: {
+        temp: parseInt(weatherKV.temp) || 68,
+        description: weatherKV.description || '--',
+        high: parseInt(weatherKV.high) || '--',
+        low: parseInt(weatherKV.low) || '--',
+        pool: weatherKV.pool || ''
+      }
+    };
+
+    lastFetch = new Date();
+    fetchError = false;
+    updateStatus('live');
+    renderAll();
+
+  } catch (err) {
+    console.warn('Sheet fetch failed, using fallback:', err);
+    fetchError = true;
+
+    if (!liveData) {
+      liveData = FALLBACK;
+      renderAll();
+    }
+    updateStatus(lastFetch ? 'stale' : 'offline');
+  }
+}
+
+function getData() {
+  return liveData || FALLBACK;
+}
+
+function updateStatus(state) {
+  const dot = document.getElementById('statusDot');
+  const text = document.getElementById('statusText');
+  if (state === 'live') {
+    dot.className = 'status-dot';
+    text.textContent = `Live · ${lastFetch.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}`;
+  } else if (state === 'stale') {
+    dot.className = 'status-dot stale';
+    text.textContent = `Stale · Last: ${lastFetch.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}`;
+  } else {
+    dot.className = 'status-dot offline';
+    text.textContent = 'Offline · Using defaults';
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+//  RENDERING
+// ═══════════════════════════════════════════════════════════════
+
+function getCurrentShift() {
+  const h = new Date().getHours();
+  if (h >= 23 || h < 7) return 1;
+  if (h >= 7 && h < 15) return 2;
+  return 3;
+}
+
+function getShiftLabel(s) {
+  return { 1: 'Night Audit · 11P–7A', 2: 'AM Shift · 7A–3P', 3: 'PM Shift · 3P–11P' }[s];
+}
+
+function getShiftShort(s) {
+  return { 1: 'Night Audit', 2: 'AM', 3: 'PM' }[s];
+}
+
+function updateClock() {
+  const now = new Date();
+  const h = now.getHours();
+  const m = String(now.getMinutes()).padStart(2, '0');
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  document.getElementById('clock').textContent = `${h % 12 || 12}:${m} ${ampm}`;
+
+  const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  document.getElementById('dateDisplay').textContent = `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
+
+  const shift = getCurrentShift();
+  const badge = document.getElementById('shiftBadge');
+  badge.textContent = getShiftLabel(shift);
+  badge.className = `shift-badge shift-${shift}`;
+}
+
+function updateCountdown() {
+  const target = new Date(MIGRATION_DATE + 'T00:00:00');
+  const diff = Math.ceil((target - new Date()) / 86400000);
+  document.getElementById('countdownDays').textContent = diff > 0 ? diff : '0';
+}
+
+function renderStats() {
+  const s = getData().stats;
+  document.getElementById('statsGrid').innerHTML = [
+    { value: s.arrivals, label: 'Arrivals' },
+    { value: s.departures, label: 'Departures' },
+    { value: s.occupancy, label: 'Occupancy' },
+    { value: s.vips, label: 'VIP / Elite' }
+  ].map(i => `<div class="stat-card"><div class="stat-value">${i.value}</div><div class="stat-label">${i.label}</div></div>`).join('');
+}
+
+function renderWeather() {
+  const w = getData().weather;
+  document.getElementById('weatherTemp').textContent = `${w.temp}°F`;
+  document.getElementById('weatherDesc').textContent = w.description;
+  document.getElementById('weatherDetail').textContent = `H: ${w.high}° · L: ${w.low}°${w.pool ? ' · ' + w.pool : ''}`;
+}
+
+function renderChecklist() {
+  const shift = getCurrentShift();
+  document.getElementById('shiftChecklistLabel').textContent = getShiftShort(shift);
+  document.getElementById('shiftChecklist').innerHTML = (CHECKLISTS[shift] || []).map(item =>
+    `<div class="checklist-item"><div class="check-bullet"></div><div>${item}</div></div>`
+  ).join('');
+}
+
+// Panel rendering
+function renderTasks() {
+  return getData().tasks.map((t, i) => `
+    <div class="task-item" style="animation-delay:${i*0.06}s">
+      <div class="task-priority priority-${t.priority}"></div>
+      <div class="task-content">
+        <div class="task-title">${t.title}</div>
+        <div class="task-meta">${t.meta}</div>
+      </div>
+      <div class="task-due ${t.dueclass || t.dueClass || 'due-normal'}">${t.due}</div>
+    </div>`).join('');
+}
+
+function renderReminders() {
+  return getData().reminders.map((r, i) => `
+    <div class="reminder-item ${r.highlight ? 'highlight' : ''}" style="animation-delay:${i*0.06}s">
+      <div class="reminder-category">${r.category}</div>
+      ${r.text}
+    </div>`).join('');
+}
+
+function renderUpdates() {
+  return getData().updates.map((u, i) => `
+    <div class="update-item" style="animation-delay:${i*0.06}s">
+      <div class="update-date">${u.date}</div>
+      <div class="update-text">${u.text}</div>
+      ${u.source ? `<div class="update-source">${u.source}</div>` : ''}
+    </div>`).join('');
+}
+
+function renderShoutouts() {
+  return getData().shoutouts.map((s, i) => `
+    <div class="shoutout-item" style="animation-delay:${i*0.06}s">
+      <div class="shoutout-name">★ ${s.name}</div>
+      <div class="shoutout-reason">${s.reason}</div>
+    </div>`).join('');
+}
+
+// Rotation
+const leftPages = [
+  { title: 'Upcoming Tasks', render: renderTasks },
+  { title: 'Reminders', render: renderReminders }
+];
+const rightPages = [
+  { title: 'Weekly Updates', render: renderUpdates },
+  { title: 'Team Shoutouts', render: renderShoutouts }
+];
+
+let leftIdx = 0, rightIdx = 0;
+
+function dots(container, pages, active) {
+  container.innerHTML = pages.map((_, i) =>
+    `<div class="page-dot ${i === active ? 'active' : ''}"></div>`
+  ).join('');
+}
+
+function showLeft(i) {
+  leftIdx = i;
+  document.getElementById('leftTitle').textContent = leftPages[i].title;
+  document.getElementById('leftContent').innerHTML = leftPages[i].render();
+  dots(document.getElementById('leftDots'), leftPages, i);
+}
+
+function showRight(i) {
+  rightIdx = i;
+  document.getElementById('rightTitle').textContent = rightPages[i].title;
+  document.getElementById('rightContent').innerHTML = rightPages[i].render();
+  dots(document.getElementById('rightDots'), rightPages, i);
+}
+
+function renderAll() {
+  renderStats();
+  renderWeather();
+  renderChecklist();
+  showLeft(leftIdx);
+  showRight(rightIdx);
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════════
+
+async function init() {
+  updateClock();
+  updateCountdown();
+
+  // Fetch live data
+  await fetchAllData();
+
+  // Hide loading screen
+  document.getElementById('loadingOverlay').classList.add('hidden');
+
+  // Timers
+  setInterval(updateClock, 1000);
+  setInterval(updateCountdown, 3600000);
+  setInterval(() => { leftIdx = (leftIdx + 1) % leftPages.length; showLeft(leftIdx); }, ROTATION_INTERVAL);
+  setTimeout(() => {
+    setInterval(() => { rightIdx = (rightIdx + 1) % rightPages.length; showRight(rightIdx); }, ROTATION_INTERVAL);
+  }, ROTATION_INTERVAL / 2);
+  setInterval(renderChecklist, 300000);
+
+  // Re-fetch from Sheet periodically
+  setInterval(fetchAllData, FETCH_INTERVAL);
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
