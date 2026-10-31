@@ -117,7 +117,7 @@
     color: var(--text);
   }
 
-  .property-name span {
+  .property-name .property-sub {
     color: var(--accent);
     font-family: 'DM Sans', sans-serif;
     font-weight: 300;
@@ -285,7 +285,13 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 16px;
+    /* stays pinned while long lists auto-scroll */
+    position: sticky;
+    top: -24px;
+    z-index: 1;
+    margin: -24px -24px 4px;
+    padding: 24px 24px 12px;
+    background: var(--surface);
   }
 
   .panel-title {
@@ -464,6 +470,36 @@
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .empty-state {
+    padding: 32px 0;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-dim);
+    font-style: italic;
+  }
+
+  /* ─── SMALL SCREENS (tablet portrait / phone) ─── */
+  @media (max-width: 900px) {
+    html, body { height: auto; overflow: auto; }
+    .app {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto;
+      height: auto;
+      min-height: 100vh;
+    }
+    .topbar {
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 12px 16px;
+    }
+    .topbar-right { flex-wrap: wrap; gap: 12px; }
+    .clock { font-size: 22px; }
+    .sidebar { grid-row: auto; overflow: visible; }
+    .sidebar-section:last-child { overflow: visible; }
+    .panel { padding: 20px 16px; overflow: visible; }
+    .panel-header { position: static; margin: 0 0 16px; padding: 0; }
+  }
 </style>
 </head>
 <body>
@@ -481,8 +517,8 @@
     <div class="topbar-left">
       <div class="logo-mark"></div>
       <div class="property-name">
-        Courtyard Liberty Station
-        <span>Team Briefing</span>
+        <span id="propertyName">Courtyard Liberty Station</span>
+        <span class="property-sub">Team Briefing</span>
       </div>
     </div>
     <div class="topbar-right">
@@ -501,8 +537,8 @@
     <div class="sidebar-section">
       <div class="section-label">PMS Migration</div>
       <div class="countdown-number" id="countdownDays">--</div>
-      <div class="countdown-label">days until FOSSE → Stay</div>
-      <div class="countdown-sub">Target: June 15, 2026 · Power of M</div>
+      <div class="countdown-label" id="countdownLabel">days until FOSSE → Stay</div>
+      <div class="countdown-sub" id="countdownSub">Power of M</div>
     </div>
 
     <div class="sidebar-section">
@@ -564,6 +600,7 @@
 //
 //  1. Create a Google Sheet with tabs named exactly:
 //     tasks, reminders, updates, shoutouts, stats, weather, config
+//     (config is optional — the defaults below are used without it)
 //
 //  2. Publish the sheet: File → Share → Publish to web → Entire document → CSV
 //
@@ -575,11 +612,15 @@ const SHEET_ID = '1LF6KdUG191bP5q97aKfi69upgGIEa7mszWyox1Vt-aY';
 // How often to re-fetch data from the sheet (milliseconds)
 const FETCH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
-// Migration target (also editable from "config" tab)
-const MIGRATION_DATE = '2026-06-15';
+// Give up on a single tab request after this long (milliseconds)
+const FETCH_TIMEOUT = 15000;
 
-// Rotation speed for auto-cycling panels (milliseconds)
-const ROTATION_INTERVAL = 15000;
+// Defaults — each can be overridden from the "config" tab
+const DEFAULT_CONFIG = {
+  migrationDate: '2026-06-15',   // YYYY-MM-DD
+  rotationInterval: 15000,       // ms between panel page flips
+  propertyName: 'Courtyard Liberty Station'
+};
 
 
 // ═══════════════════════════════════════════════════════════════
@@ -614,19 +655,25 @@ const ROTATION_INTERVAL = 15000;
 //  TAB: config
 //  Columns: key | value
 //  Rows: migrationDate | rotationInterval | propertyName
+//  rotationInterval is in seconds (e.g. 15)
+//
+//  NOTE: if a tab name doesn't exist, Google silently returns the FIRST
+//  tab instead. Each tab's header row is checked below, so a missing tab
+//  is ignored rather than showing the wrong data.
 
 
 // ═══════════════════════════════════════════════════════════════
-//  FALLBACK DATA (used when Sheet is unreachable)
+//  EMPTY DATA (shown until / unless the Sheet loads)
 // ═══════════════════════════════════════════════════════════════
 
-const FALLBACK = {
+const EMPTY = {
   tasks: [],
   reminders: [],
   updates: [],
   shoutouts: [],
   stats: { arrivals: '--', departures: '--', occupancy: '--%', vips: '--' },
-  weather: { temp: '--', description: 'San Diego', high: '--', low: '--', pool: '' }
+  weather: { temp: '--', description: '--', high: '--', low: '--', pool: '' },
+  config: { ...DEFAULT_CONFIG }
 };
 
 // ─── Shift checklists (static — these don't change often) ───
@@ -670,48 +717,12 @@ const CHECKLISTS = {
 
 let liveData = null;
 let lastFetch = null;
-let fetchError = false;
 
 function sheetURL(tab) {
   return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`;
 }
 
-function parseCSV(csv) {
-  // Simple CSV parser that handles quoted fields
-  const lines = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < csv.length; i++) {
-    const ch = csv[i];
-    if (ch === '"') {
-      if (inQuotes && csv[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (ch === ',' && !inQuotes) {
-      lines.push(current);
-      current = '';
-    } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
-      if (current || lines.length > 0) {
-        lines.push(current);
-        current = '';
-      }
-      if (lines.length > 0) {
-        // We've reached end of a row — but we need to return rows not flat cells
-        // Let me redo this properly
-      }
-    } else {
-      current += ch;
-    }
-  }
-
-  // Better approach: split into rows first
-  return parseCSVRows(csv);
-}
-
+// CSV parser that handles quoted fields, escaped quotes and newlines in cells
 function parseCSVRows(csv) {
   const rows = [];
   let row = [];
@@ -748,10 +759,16 @@ function parseCSVRows(csv) {
   return rows;
 }
 
-function csvToObjects(csv) {
+function headersOf(rows) {
+  return rows.length ? rows[0].map(h => h.toLowerCase().trim()) : [];
+}
+
+// Returns null when the header row doesn't contain the expected column
+// (i.e. the tab is missing and Google sent back a different one)
+function csvToObjects(csv, requiredHeader) {
   const rows = parseCSVRows(csv);
-  if (rows.length < 2) return [];
-  const headers = rows[0].map(h => h.toLowerCase().trim());
+  const headers = headersOf(rows);
+  if (!headers.includes(requiredHeader)) return null;
   return rows.slice(1).map(row => {
     const obj = {};
     headers.forEach((h, i) => { obj[h] = row[i] || ''; });
@@ -761,7 +778,8 @@ function csvToObjects(csv) {
 
 function csvToKeyValue(csv) {
   const rows = parseCSVRows(csv);
-  if (rows.length < 2) return {};
+  const headers = headersOf(rows);
+  if (headers[0] !== 'key') return null;
   const obj = {};
   rows.slice(1).forEach(row => {
     if (row[0]) obj[row[0].toLowerCase().trim()] = row[1] || '';
@@ -769,85 +787,140 @@ function csvToKeyValue(csv) {
   return obj;
 }
 
-async function fetchTab(tab) {
-  const resp = await fetch(sheetURL(tab));
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  return await resp.text();
+function isTrue(v)  { return String(v).trim().toUpperCase() === 'TRUE'; }
+function isFalse(v) { return String(v).trim().toUpperCase() === 'FALSE'; }
+
+// "72°F", "72", "72.4 F" → "72"; anything unparseable → "--"
+function cleanTemp(v) {
+  const n = parseFloat(String(v).replace(/[^\d.\-]/g, ''));
+  return Number.isFinite(n) ? String(Math.round(n)) : '--';
 }
 
-async function fetchAllData() {
+async function fetchTab(tab) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT);
   try {
-    const [tasksCSV, remindersCSV, updatesCSV, shoutoutsCSV, statsCSV, weatherCSV] = await Promise.all([
-      fetchTab('tasks'),
-      fetchTab('reminders'),
-      fetchTab('updates'),
-      fetchTab('shoutouts'),
-      fetchTab('stats'),
-      fetchTab('weather')
-    ]);
-
-    const tasks = csvToObjects(tasksCSV).filter(t => t.active !== 'FALSE');
-    const reminders = csvToObjects(remindersCSV)
-      .filter(r => r.active !== 'FALSE')
-      .map(r => ({ ...r, highlight: r.highlight === 'TRUE' }));
-    const updates = csvToObjects(updatesCSV).filter(u => u.active !== 'FALSE');
-    const shoutouts = csvToObjects(shoutoutsCSV).filter(s => s.active !== 'FALSE');
-    const statsKV = csvToKeyValue(statsCSV);
-    const weatherKV = csvToKeyValue(weatherCSV);
-
-    liveData = {
-      tasks,
-      reminders,
-      updates,
-      shoutouts,
-      stats: {
-        arrivals: statsKV.arrivals || '--',
-        departures: statsKV.departures || '--',
-        occupancy: statsKV.occupancy || '--%',
-        vips: statsKV.vips || '--'
-      },
-      weather: {
-        temp: parseInt(weatherKV.temp) || 68,
-        description: weatherKV.description || '--',
-        high: parseInt(weatherKV.high) || '--',
-        low: parseInt(weatherKV.low) || '--',
-        pool: weatherKV.pool || ''
-      }
-    };
-
-    lastFetch = new Date();
-    fetchError = false;
-    updateStatus('live');
-    renderAll();
-
-  } catch (err) {
-    console.warn('Sheet fetch failed, using fallback:', err);
-    fetchError = true;
-
-    if (!liveData) {
-      liveData = FALLBACK;
-      renderAll();
-    }
-    updateStatus(lastFetch ? 'stale' : 'offline');
+    const resp = await fetch(sheetURL(tab), { signal: ctrl.signal, cache: 'no-store' });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return await resp.text();
+  } finally {
+    clearTimeout(timer);
   }
 }
 
+function parseConfig(kv) {
+  const cfg = { ...DEFAULT_CONFIG };
+  if (!kv) return cfg;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(kv.migrationdate || '')) cfg.migrationDate = kv.migrationdate;
+  const secs = parseFloat(kv.rotationinterval);
+  if (secs >= 3) cfg.rotationInterval = secs * 1000;
+  if (kv.propertyname) cfg.propertyName = kv.propertyname;
+  return cfg;
+}
+
+// Each tab is parsed independently: a tab that fails keeps its previous value
+const TABS = {
+  tasks: csv => {
+    const rows = csvToObjects(csv, 'title');
+    return rows && rows.filter(t => t.title && !isFalse(t.active));
+  },
+  reminders: csv => {
+    const rows = csvToObjects(csv, 'text');
+    return rows && rows
+      .filter(r => r.text && !isFalse(r.active))
+      .map(r => ({ ...r, highlight: isTrue(r.highlight) }));
+  },
+  updates: csv => {
+    const rows = csvToObjects(csv, 'text');
+    return rows && rows.filter(u => u.text && !isFalse(u.active));
+  },
+  shoutouts: csv => {
+    const rows = csvToObjects(csv, 'name');
+    return rows && rows.filter(s => s.name && !isFalse(s.active));
+  },
+  stats: csv => {
+    const kv = csvToKeyValue(csv);
+    return kv && {
+      arrivals: kv.arrivals || '--',
+      departures: kv.departures || '--',
+      occupancy: kv.occupancy || '--%',
+      vips: kv.vips || '--'
+    };
+  },
+  weather: csv => {
+    const kv = csvToKeyValue(csv);
+    return kv && {
+      temp: cleanTemp(kv.temp),
+      description: kv.description || '--',
+      high: cleanTemp(kv.high),
+      low: cleanTemp(kv.low),
+      pool: kv.pool || ''
+    };
+  },
+  // Optional — a missing config tab just means defaults
+  config: csv => parseConfig(csvToKeyValue(csv))
+};
+
+async function fetchAllData() {
+  const names = Object.keys(TABS);
+  const results = await Promise.allSettled(names.map(fetchTab));
+
+  const next = { ...(liveData || EMPTY) };
+  let failed = 0;
+
+  results.forEach((res, i) => {
+    const name = names[i];
+    if (res.status !== 'fulfilled') {
+      failed++;
+      console.warn(`Sheet tab "${name}" failed:`, res.reason);
+      return;
+    }
+    const parsed = TABS[name](res.value);
+    if (parsed === null) {
+      console.warn(`Sheet tab "${name}" not found (header row didn't match)`);
+      return;
+    }
+    next[name] = parsed;
+  });
+
+  if (failed === names.length) {
+    // Total failure — keep whatever we had
+    if (!liveData) {
+      liveData = EMPTY;
+      renderAll();
+    }
+    updateStatus(lastFetch ? 'stale' : 'offline');
+    return;
+  }
+
+  const prevRotation = getData().config.rotationInterval;
+  liveData = next;
+  lastFetch = new Date();
+  updateStatus(failed ? 'partial' : 'live');
+  renderAll();
+  if (liveData.config.rotationInterval !== prevRotation) startRotation();
+}
+
 function getData() {
-  return liveData || FALLBACK;
+  return liveData || EMPTY;
 }
 
 function updateStatus(state) {
   const dot = document.getElementById('statusDot');
   const text = document.getElementById('statusText');
+  const time = lastFetch && lastFetch.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
   if (state === 'live') {
     dot.className = 'status-dot';
-    text.textContent = `Live · ${lastFetch.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}`;
+    text.textContent = `Live · ${time}`;
+  } else if (state === 'partial') {
+    dot.className = 'status-dot stale';
+    text.textContent = `Partial · ${time}`;
   } else if (state === 'stale') {
     dot.className = 'status-dot stale';
-    text.textContent = `Stale · Last: ${lastFetch.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}`;
+    text.textContent = `Stale · Last: ${time}`;
   } else {
     dot.className = 'status-dot offline';
-    text.textContent = 'Offline · Using defaults';
+    text.textContent = 'Offline · No data';
   }
 }
 
@@ -855,6 +928,21 @@ function updateStatus(state) {
 // ═══════════════════════════════════════════════════════════════
 //  RENDERING
 // ═══════════════════════════════════════════════════════════════
+
+// Sheet content is plain text — escape it before it goes into innerHTML
+function esc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function pick(value, allowed, fallback) {
+  const v = String(value || '').trim().toLowerCase();
+  return allowed.includes(v) ? v : fallback;
+}
+
+function emptyState(msg) {
+  return `<div class="empty-state">${msg}</div>`;
+}
 
 function getCurrentShift() {
   const h = new Date().getHours();
@@ -871,27 +959,56 @@ function getShiftShort(s) {
   return { 1: 'Night Audit', 2: 'AM', 3: 'PM' }[s];
 }
 
+const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+let renderedShift = null;
+
 function updateClock() {
   const now = new Date();
   const h = now.getHours();
   const m = String(now.getMinutes()).padStart(2, '0');
   const ampm = h >= 12 ? 'PM' : 'AM';
   document.getElementById('clock').textContent = `${h % 12 || 12}:${m} ${ampm}`;
-
-  const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  document.getElementById('dateDisplay').textContent = `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
+  document.getElementById('dateDisplay').textContent = `${DAYS[now.getDay()]}, ${MONTHS[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
 
   const shift = getCurrentShift();
   const badge = document.getElementById('shiftBadge');
   badge.textContent = getShiftLabel(shift);
   badge.className = `shift-badge shift-${shift}`;
+
+  // Swap the checklist the moment the shift changes
+  if (shift !== renderedShift) renderChecklist();
 }
 
 function updateCountdown() {
-  const target = new Date(MIGRATION_DATE + 'T00:00:00');
-  const diff = Math.ceil((target - new Date()) / 86400000);
-  document.getElementById('countdownDays').textContent = diff > 0 ? diff : '0';
+  const dateStr = getData().config.migrationDate;
+  const [y, mo, d] = dateStr.split('-').map(Number);
+  const target = new Date(y, mo - 1, d);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diff = Math.round((target - today) / 86400000);
+
+  const num = document.getElementById('countdownDays');
+  const label = document.getElementById('countdownLabel');
+  if (diff > 0) {
+    num.textContent = diff;
+    label.textContent = `day${diff === 1 ? '' : 's'} until FOSSE → Stay`;
+  } else if (diff === 0) {
+    num.textContent = 'Today';
+    label.textContent = 'FOSSE → Stay go-live';
+  } else {
+    num.textContent = -diff;
+    label.textContent = `day${diff === -1 ? '' : 's'} since FOSSE → Stay go-live`;
+  }
+  document.getElementById('countdownSub').textContent =
+    `${diff >= 0 ? 'Target' : 'Went live'}: ${MONTHS[mo - 1]} ${d}, ${y} · Power of M`;
+}
+
+function renderProperty() {
+  const name = getData().config.propertyName;
+  document.getElementById('propertyName').textContent = name;
+  document.title = `${name} — Team Briefing`;
 }
 
 function renderStats() {
@@ -901,59 +1018,68 @@ function renderStats() {
     { value: s.departures, label: 'Departures' },
     { value: s.occupancy, label: 'Occupancy' },
     { value: s.vips, label: 'VIP / Elite' }
-  ].map(i => `<div class="stat-card"><div class="stat-value">${i.value}</div><div class="stat-label">${i.label}</div></div>`).join('');
+  ].map(i => `<div class="stat-card"><div class="stat-value">${esc(i.value)}</div><div class="stat-label">${i.label}</div></div>`).join('');
 }
 
 function renderWeather() {
   const w = getData().weather;
   document.getElementById('weatherTemp').textContent = `${w.temp}°F`;
   document.getElementById('weatherDesc').textContent = w.description;
-  document.getElementById('weatherDetail').textContent = `H: ${w.high}° · L: ${w.low}°${w.pool ? ' · ' + w.pool : ''}`;
+  document.getElementById('weatherDetail').textContent = `H: ${w.high}° · L: ${w.low}°${w.pool ? ' · Pool: ' + w.pool.replace(/^pool:?\s*/i, '') : ''}`;
 }
 
 function renderChecklist() {
   const shift = getCurrentShift();
+  renderedShift = shift;
   document.getElementById('shiftChecklistLabel').textContent = getShiftShort(shift);
   document.getElementById('shiftChecklist').innerHTML = (CHECKLISTS[shift] || []).map(item =>
-    `<div class="checklist-item"><div class="check-bullet"></div><div>${item}</div></div>`
+    `<div class="checklist-item"><div class="check-bullet"></div><div>${esc(item)}</div></div>`
   ).join('');
 }
 
 // Panel rendering
 function renderTasks() {
-  return getData().tasks.map((t, i) => `
+  const tasks = getData().tasks;
+  if (!tasks.length) return emptyState('No open tasks');
+  return tasks.map((t, i) => `
     <div class="task-item" style="animation-delay:${i*0.06}s">
-      <div class="task-priority priority-${t.priority}"></div>
+      <div class="task-priority priority-${pick(t.priority, ['high', 'medium', 'low'], 'low')}"></div>
       <div class="task-content">
-        <div class="task-title">${t.title}</div>
-        <div class="task-meta">${t.meta}</div>
+        <div class="task-title">${esc(t.title)}</div>
+        <div class="task-meta">${esc(t.meta)}</div>
       </div>
-      <div class="task-due ${t.dueclass || t.dueClass || 'due-normal'}">${t.due}</div>
+      ${t.due ? `<div class="task-due ${pick(t.dueclass, ['due-urgent', 'due-soon', 'due-normal'], 'due-normal')}">${esc(t.due)}</div>` : ''}
     </div>`).join('');
 }
 
 function renderReminders() {
-  return getData().reminders.map((r, i) => `
+  const reminders = getData().reminders;
+  if (!reminders.length) return emptyState('No reminders right now');
+  return reminders.map((r, i) => `
     <div class="reminder-item ${r.highlight ? 'highlight' : ''}" style="animation-delay:${i*0.06}s">
-      <div class="reminder-category">${r.category}</div>
-      ${r.text}
+      ${r.category ? `<div class="reminder-category">${esc(r.category)}</div>` : ''}
+      ${esc(r.text)}
     </div>`).join('');
 }
 
 function renderUpdates() {
-  return getData().updates.map((u, i) => `
+  const updates = getData().updates;
+  if (!updates.length) return emptyState('No updates this week');
+  return updates.map((u, i) => `
     <div class="update-item" style="animation-delay:${i*0.06}s">
-      <div class="update-date">${u.date}</div>
-      <div class="update-text">${u.text}</div>
-      ${u.source ? `<div class="update-source">${u.source}</div>` : ''}
+      ${u.date ? `<div class="update-date">${esc(u.date)}</div>` : ''}
+      <div class="update-text">${esc(u.text)}</div>
+      ${u.source ? `<div class="update-source">${esc(u.source)}</div>` : ''}
     </div>`).join('');
 }
 
 function renderShoutouts() {
-  return getData().shoutouts.map((s, i) => `
+  const shoutouts = getData().shoutouts;
+  if (!shoutouts.length) return emptyState('No shoutouts yet — recognize a teammate!');
+  return shoutouts.map((s, i) => `
     <div class="shoutout-item" style="animation-delay:${i*0.06}s">
-      <div class="shoutout-name">★ ${s.name}</div>
-      <div class="shoutout-reason">${s.reason}</div>
+      <div class="shoutout-name">★ ${esc(s.name)}</div>
+      <div class="shoutout-reason">${esc(s.reason)}</div>
     </div>`).join('');
 }
 
@@ -975,11 +1101,38 @@ function dots(container, pages, active) {
   ).join('');
 }
 
+// On a wall display nobody scrolls, so long lists scroll themselves:
+// hold at the top, glide to the bottom, hold, then the page flips.
+const scrollAnims = {};
+
+function autoScroll(panelId) {
+  cancelAnimationFrame(scrollAnims[panelId]);
+  const panel = document.getElementById(panelId);
+  panel.scrollTop = 0;
+  // Stacked mobile layout scrolls the whole page instead
+  if (window.matchMedia('(max-width: 900px)').matches) return;
+
+  const duration = getData().config.rotationInterval;
+  const hold = Math.min(3000, duration * 0.2);
+  let start = null;
+  const step = ts => {
+    if (start === null) start = ts;
+    const max = panel.scrollHeight - panel.clientHeight;
+    if (max > 0) {
+      const t = Math.min(1, Math.max(0, (ts - start - hold) / (duration - hold * 2)));
+      panel.scrollTop = max * t;
+    }
+    if (ts - start < duration) scrollAnims[panelId] = requestAnimationFrame(step);
+  };
+  scrollAnims[panelId] = requestAnimationFrame(step);
+}
+
 function showLeft(i) {
   leftIdx = i;
   document.getElementById('leftTitle').textContent = leftPages[i].title;
   document.getElementById('leftContent').innerHTML = leftPages[i].render();
   dots(document.getElementById('leftDots'), leftPages, i);
+  autoScroll('leftPanel');
 }
 
 function showRight(i) {
@@ -987,9 +1140,26 @@ function showRight(i) {
   document.getElementById('rightTitle').textContent = rightPages[i].title;
   document.getElementById('rightContent').innerHTML = rightPages[i].render();
   dots(document.getElementById('rightDots'), rightPages, i);
+  autoScroll('rightPanel');
+}
+
+let rotationTimers = [];
+
+// (Re)start panel rotation — called at init and when rotationInterval changes
+function startRotation() {
+  rotationTimers.forEach(t => { clearInterval(t); clearTimeout(t); });
+  const interval = getData().config.rotationInterval;
+  rotationTimers = [
+    setInterval(() => showLeft((leftIdx + 1) % leftPages.length), interval),
+    setTimeout(() => {
+      rotationTimers.push(setInterval(() => showRight((rightIdx + 1) % rightPages.length), interval));
+    }, interval / 2)
+  ];
 }
 
 function renderAll() {
+  renderProperty();
+  updateCountdown();
   renderStats();
   renderWeather();
   renderChecklist();
@@ -1004,22 +1174,20 @@ function renderAll() {
 
 async function init() {
   updateClock();
-  updateCountdown();
+  renderAll();
 
   // Fetch live data
-  await fetchAllData();
-
-  // Hide loading screen
-  document.getElementById('loadingOverlay').classList.add('hidden');
+  try {
+    await fetchAllData();
+  } finally {
+    // Hide loading screen no matter what happened
+    document.getElementById('loadingOverlay').classList.add('hidden');
+  }
 
   // Timers
   setInterval(updateClock, 1000);
-  setInterval(updateCountdown, 3600000);
-  setInterval(() => { leftIdx = (leftIdx + 1) % leftPages.length; showLeft(leftIdx); }, ROTATION_INTERVAL);
-  setTimeout(() => {
-    setInterval(() => { rightIdx = (rightIdx + 1) % rightPages.length; showRight(rightIdx); }, ROTATION_INTERVAL);
-  }, ROTATION_INTERVAL / 2);
-  setInterval(renderChecklist, 300000);
+  setInterval(updateCountdown, 60 * 60 * 1000);
+  startRotation();
 
   // Re-fetch from Sheet periodically
   setInterval(fetchAllData, FETCH_INTERVAL);
