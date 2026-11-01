@@ -170,7 +170,9 @@
         <select id="honorific">
           <option>Mr.</option>
           <option>Ms.</option>
+          <option>Mrs.</option>
           <option>Mx.</option>
+          <option>Dr.</option>
         </select>
       </div>
       <div class="field">
@@ -230,7 +232,7 @@
 
   <section>
     <h2>Response</h2>
-    <textarea id="output" readonly placeholder="The finished letter will appear here."></textarea>
+    <textarea id="output" placeholder="The finished letter will appear here. You can edit it before copying."></textarea>
     <div class="buttons">
       <button class="primary" id="copyBtn">Copy</button>
       <button id="regenBtn"><span class="spinner"></span><span class="label">Regenerate</span></button>
@@ -247,6 +249,12 @@
 const KEY_STORAGE = "sanal_api_key";
 const FORM_STORAGE = "sanal_form";
 const CANNED_INDEX_STORAGE = "sanal_canned_index";
+
+// Give up on an API request after this long.
+const API_TIMEOUT_MS = 60000;
+
+// Words the system prompt bans; checked again on the returned letter.
+const BANNED_WORDS = ["genuinely", "honestly"];
 
 const MODEL_LABELS = {
   "claude-haiku-5-5": "Haiku 5.5",
@@ -443,11 +451,36 @@ const NAME_ALLOWLIST = new Set([
   "convenient", "close", "beautiful", "lovely", "comfortable", "easy", "super"
 ]);
 
+// Ordinary words that often open a sentence. A capitalized word at the start of a
+// sentence counts as a possible name unless it is here or in NAME_ALLOWLIST, so a
+// review like "Maria at the desk was great." is not answered with a canned letter.
+const SENTENCE_STARTERS = new Set([
+  "he", "she", "they", "their", "there", "these", "those", "that", "that's", "it's", "its",
+  "we're", "we've", "we'll", "we'd", "you're", "your", "me", "us", "everybody",
+  "what", "when", "where", "which", "who", "why", "how", "if", "so", "also", "just", "really",
+  "truly", "absolutely", "simply", "such", "all", "both", "each", "every", "some", "no", "not",
+  "yes", "wow", "ok", "okay", "after", "before", "from", "for", "with", "on", "in", "at", "as",
+  "by", "to", "of", "first", "next", "then", "again", "always", "never", "only", "even",
+  "can't", "cannot", "can", "could", "should", "must", "did", "do", "does", "had", "has", "have",
+  "is", "was", "were", "are", "be", "been", "being", "came", "come", "stayed", "staying",
+  "checked", "check", "rooms", "beds", "bed", "walking", "walkable", "quiet", "spacious",
+  "service", "staying", "family", "kids", "trip", "visit", "experience", "place", "property",
+  "loved", "enjoyed", "enjoy", "appreciated", "pleasant", "outstanding", "exceptional",
+  "incredible", "terrific", "superb", "solid", "decent", "fine", "fun", "ten", "five",
+  "would've", "will", "keep", "thankyou", "cheers", "lots", "plenty", "more", "most", "much",
+  "many", "one", "two", "second", "third", "last", "this", "here", "now", "today", "returning",
+  "highly", "top", "five-star", "a+", "perfect", "beautiful", "comfy", "cozy", "cosy"
+]);
+
 function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// Positive phrases that contain a trigger word ("Can't wait to come back!").
+const TRIGGER_EXEMPT_PHRASES = /\b(can['’]?t|cannot|can not) wait\b/gi;
+
 function findTriggerWord(text) {
+  text = text.replace(TRIGGER_EXEMPT_PHRASES, " ");
   for (const w of TRIGGER_WORDS) {
     const re = new RegExp("(^|[^a-z0-9])" + escapeRegex(w) + "s?(?![a-z0-9])", "i");
     if (re.test(text)) return w;
@@ -463,8 +496,8 @@ function findRoomNumber(text) {
   return m ? m[0] : null;
 }
 
-// Heuristic: a capitalized word that is not at the start of a sentence and is not
-// a known place, brand, or common word is treated as a possible person's name.
+// Heuristic: a capitalized word that is not a known place, brand, or common word
+// is treated as a possible person's name. False alarms only cost a model call.
 function findOtherName(text, guestLast) {
   const guest = (guestLast || "").trim().toLowerCase();
   const re = /[A-Za-z][A-Za-z'’-]*/g;
@@ -475,8 +508,8 @@ function findOtherName(text, guestLast) {
     const lower = word.toLowerCase();
     if (NAME_ALLOWLIST.has(lower) || lower === guest) continue;
     const before = text.slice(0, m.index).replace(/\s+$/, "");
-    const sentenceStart = before === "" || /[.!?\n:;"(]$/.test(before);
-    if (sentenceStart) continue;
+    const sentenceStart = before === "" || /[.!?\n:;"“(]$/.test(before);
+    if (sentenceStart && SENTENCE_STARTERS.has(lower)) continue;
     return word;
   }
   return null;
@@ -518,6 +551,7 @@ function saveForm() {
     data[f] = el[f].type === "checkbox" ? el[f].checked : el[f].value;
   }
   data.output = el.output.value;
+  data.lastPath = lastPath;
   store(FORM_STORAGE, JSON.stringify(data));
 }
 
@@ -532,6 +566,7 @@ function restoreForm() {
   }
   if (!el.model.value) el.model.value = "claude-sonnet-5-5";
   if (data.output) el.output.value = data.output;
+  if (data.output && (data.lastPath === "api" || data.lastPath === "canned")) lastPath = data.lastPath;
 }
 
 /* ---------- Score helpers ---------- */
@@ -619,7 +654,16 @@ function buildCanned(i) {
   return [greeting(), opening, middle, TRIPADVISOR_PARAGRAPH, closing, SIGNATURE].join("\n\n");
 }
 
+// Canned letters include the TripAdvisor link, so they are only for 9-10 scores.
+function cannedAllowed() {
+  const s = effectiveScore();
+  if (s !== null && s >= 9) return true;
+  setStatus("Canned letters are only for 9-10 scores (they include the TripAdvisor link). Uncheck \"Generic review\" to use the model.", "error");
+  return false;
+}
+
 function showNextCanned() {
+  if (!cannedAllowed()) return;
   let idx = parseInt(load(CANNED_INDEX_STORAGE) || "0", 10);
   if (!(idx >= 0 && idx < CANNED.length)) idx = 0;
   el.output.value = buildCanned(idx);
@@ -664,10 +708,14 @@ async function callApi(button) {
   const model = el.model.value;
   const body = {
     model: model,
-    max_tokens: 1024,
-    system: SYSTEM_PROMPT,
+    // Thinking shares this cap with the letter, and Opus 5.5 cannot turn thinking off,
+    // so leave headroom; a letter itself is only a few hundred tokens.
+    max_tokens: 4096,
+    // The system prompt is identical on every request, so cache it. Drafting several
+    // replies within 5 minutes then reads it at a fraction of the input price.
+    system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: buildUserMessage() }],
-    // A short letter needs little reasoning; low effort keeps thinking inside the 1024-token cap.
+    // A short letter needs little reasoning.
     output_config: { effort: "low" }
   };
   const headers = {
@@ -686,17 +734,24 @@ async function callApi(button) {
   setStatus("Generating with " + MODEL_LABELS[model] + "…");
 
   let res, data = null;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), API_TIMEOUT_MS);
   try {
     res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: headers,
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      signal: ctrl.signal
     });
     try { data = await res.json(); } catch (e) { data = null; }
   } catch (e) {
     setBusy(false);
-    setStatus("Network error: could not reach api.anthropic.com. Check your connection and try again.", "error");
+    setStatus(e.name === "AbortError"
+      ? "The request timed out after " + (API_TIMEOUT_MS / 1000) + " seconds. Try again."
+      : "Network error: could not reach api.anthropic.com. Check your connection and try again.", "error");
     return;
+  } finally {
+    clearTimeout(timer);
   }
   setBusy(false);
 
@@ -727,10 +782,28 @@ async function callApi(button) {
   const usage = data.usage || {};
   let msg = "Generated with " + MODEL_LABELS[model] +
     " · " + (usage.input_tokens ?? "?") + " input / " + (usage.output_tokens ?? "?") + " output tokens";
+  if (usage.cache_read_input_tokens) msg += " (" + usage.cache_read_input_tokens + " cached)";
   if (data.model && data.model !== model) msg += " · served by " + data.model + " (fallback)";
   if (data.stop_reason === "max_tokens") msg += " · letter may be cut off";
-  setStatus(msg, data.stop_reason === "max_tokens" ? "error" : "ok");
+  const problems = checkLetter(el.output.value);
+  if (problems.length) msg += " · Check before sending: " + problems.join("; ");
+  setStatus(msg, data.stop_reason === "max_tokens" || problems.length ? "error" : "ok");
   updateUI();
+}
+
+// Re-checks the house rules the model is asked to follow; returns a list of problems.
+function checkLetter(text) {
+  const problems = [];
+  if (!text.trimEnd().endsWith(SIGNATURE)) problems.push("signature block missing or changed");
+  const s = effectiveScore();
+  const hasLink = text.includes(TRIPADVISOR_URL);
+  if (s !== null && s >= 9 && !hasLink) problems.push("TripAdvisor link missing for a 9-10 score");
+  if ((s === null || s < 9) && hasLink) problems.push("TripAdvisor link included on a score below 9");
+  for (const w of BANNED_WORDS) {
+    if (new RegExp("\\b" + w + "\\b", "i").test(text)) problems.push("uses the word \"" + w + "\"");
+  }
+  if (/\*\*|^#+\s|\]\(http/m.test(text)) problems.push("contains markdown formatting");
+  return problems;
 }
 
 /* ---------- Actions ---------- */
@@ -848,6 +921,9 @@ el.generic.addEventListener("change", () => {
   saveForm();
   updateUI();
 });
+
+// Hand edits to the letter are kept across reloads.
+el.output.addEventListener("input", saveForm);
 
 el.generateBtn.addEventListener("click", generate);
 el.nextCannedBtn.addEventListener("click", () => { if (validate()) showNextCanned(); });
